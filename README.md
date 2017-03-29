@@ -1,4 +1,4 @@
-# Terminus Upstream Deploymnent Plugin
+# Terminus Upstream Deployment Plugin
 
 [![Terminus v1.x Compatible](https://img.shields.io/badge/terminus-v1.x-green.svg)](https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/master)
 
