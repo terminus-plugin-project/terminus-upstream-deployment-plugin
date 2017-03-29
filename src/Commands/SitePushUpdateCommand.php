@@ -97,7 +97,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             $branch = $options['branch'];
 
             $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$repo} {$branch}" );
-            $this->passthru("git --git-dir='{$git_location}/.git' pull push origin master");
+            $this->passthru("git --git-dir='{$git_location}/.git' push origin master");
             $this->passthru('rm -rf ' . $git_location);
           }else{
             $upstream->applyUpstreamUpdates($site_id.'.dev', ['accept-upstream' => true]);
