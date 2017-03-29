@@ -1,6 +1,6 @@
-# Terminus Upstream Dev Tools
+# Terminus Upstream Deploymnent Plugin
 
-[![Terminus v1.x Compatible](https://img.shields.io/badge/terminus-v1.x-green.svg)](https://github.com/terminus-plugin-project/terminus-upstream-dev/tree/master)
+[![Terminus v1.x Compatible](https://img.shields.io/badge/terminus-v1.x-green.svg)](https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/master)
 
 Terminus plugin to automate the process of updating a site through the upstream. This performs a backup before applying upstream updates.
 
@@ -11,7 +11,7 @@ as this site will:
 * pull any updates from the upstream and apply them on dev
 * run updatedb on your dev environment
 * run clear cache on your dev environment
-* check to see if your test environment initiliazed
+* check to see if your test environment initialized
 * take a backup of your test environment
 * run updatedb on your test environment
 * run clear cache on your test environment

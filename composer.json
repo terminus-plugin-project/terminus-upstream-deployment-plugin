@@ -1,7 +1,7 @@
 {
-  "name": "terminus-plugin-project/terminus-upstream-dev",
+  "name": "terminus-plugin-project/terminus-upstream-deployment-plugin",
   "description": "",
-  "homepage": "https://github.com/terminus-plugin-project/terminus-upstream-dev",
+  "homepage": "https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin",
   "license": "MIT",
   "type": "terminus-plugin",
   "require": {
