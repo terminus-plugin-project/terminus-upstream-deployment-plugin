@@ -87,7 +87,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
         if($current_env == 'dev') {
           //Following should only run for the dev environment
           if ($options['use_git']) {
-            $this->passthru('git clone ssh://codeserver.dev.' . $id . '@codeserver.dev.' . $id . '.drush.in:2222/~/repository.git ' . $git_location);
+            $this->passthru("git clone ssh://codeserver.dev.{$id}@codeserver.dev.{$id}.drush.in:2222/~/repository.git {$git_location}");
             $repo = $options['repo'];
             if(is_null($repo)){
               $upstream_info = explode(':', $data['upstream']);
@@ -96,8 +96,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             }
             $branch = $options['branch'];
 
-            $message = ($options['message'] == '' ? '' : '-m "' . $options['message'] . '""');
-            $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$message} {$repo} {$branch}" );
+            $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$repo} {$branch}" );
             $this->passthru("git --git-dir='{$git_location}/.git' pull push origin master");
             $this->passthru('rm -rf ' . $git_location);
           }else{
