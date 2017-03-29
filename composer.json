@@ -4,8 +4,27 @@
   "homepage": "https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin",
   "license": "MIT",
   "type": "terminus-plugin",
+  "authors": [
+      {
+          "name": "Sean Dietrich",
+          "email": "sean.dietrich@inresonance.com",
+          "homepage": "https://github.com/sean-e-dietrich",
+          "role": "Developer"
+      }
+  ],
+  "keywords": [
+      "pantheon",
+      "terminus",
+      "upstream",
+      "plugin",
+      "backup",
+      "deployment"
+  ],
   "require": {
     "php": ">=5.4"
+  },
+  "support": {
+    "issues": "https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/issues"
   },
   "autoload": {
     "psr-4": { "Pantheon\\TerminusUpstreamDev\\": "src" }
