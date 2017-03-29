@@ -1,0 +1,18 @@
+{
+  "name": "terminus-plugin-project/terminus-upstream-dev",
+  "description": "",
+  "homepage": "https://github.com/terminus-plugin-project/terminus-upstream-dev",
+  "license": "MIT",
+  "type": "terminus-plugin",
+  "require": {
+    "php": ">=5.4"
+  },
+  "autoload": {
+    "psr-4": { "Pantheon\\TerminusUpstreamDev\\": "src" }
+  },
+  "extra": {
+    "terminus": {
+      "compatible-version": "^1"
+    }
+  }
+}
