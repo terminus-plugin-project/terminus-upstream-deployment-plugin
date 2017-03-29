@@ -1,6 +1,6 @@
 {
   "name": "terminus-plugin-project/terminus-upstream-deployment-plugin",
-  "description": "",
+  "description": "Upstream Deployment - A Terminus plugin to automate the process of updating a site through the upstream.",
   "homepage": "https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin",
   "license": "MIT",
   "type": "terminus-plugin",
