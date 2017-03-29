@@ -1,4 +1,4 @@
-# Terminus Upstream Deploymnent Plugin
+# Terminus Upstream Deployment Plugin
 
 [![Terminus v1.x Compatible](https://img.shields.io/badge/terminus-v1.x-green.svg)](https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/master)
 
@@ -55,7 +55,7 @@ $ terminus site:update companysite-33.dev --use_git --branch="dev"
 For help installing, see [Manage Plugins](https://pantheon.io/docs/terminus/plugins/)
 ```
 mkdir -p ~/.terminus/plugins
-composer create-project -d ~/.terminus/plugins pantheon-systems/terminus-build-tools-plugin:~1
+composer create-project -d ~/.terminus/plugins terminus-plugin-project/terminus-upstream-deployment-plugin:~1
 ```
 
 ## Help
