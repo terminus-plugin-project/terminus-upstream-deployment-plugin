@@ -5,7 +5,7 @@
 Terminus plugin to automate the process of updating a site through the upstream. This performs a backup before applying upstream updates.
 
 This plugin differs from [terminus-mass-update](https://github.com/pantheon-systems/terminus-mass-update) 
-as this site will:
+as this will only take a single site at a time along with the following features:
  
 * take a backup of your dev environment
 * pull any updates from the upstream and apply them on dev
