@@ -4,6 +4,22 @@
 
 Terminus plugin to automate the process of updating a site through the upstream. This performs a backup before applying upstream updates.
 
+This plugin differs from [terminus-mass-update](https://github.com/pantheon-systems/terminus-mass-update) 
+as this site will:
+ 
+* take a backup of your dev environment
+* pull any updates from the upstream and apply them on dev
+* run updatedb on your dev environment
+* run clear cache on your dev environment
+* check to see if your test environment initiliazed
+* take a backup of your test environment
+* run updatedb on your test environment
+* run clear cache on your test environment
+* check to see if youur live environment is initialized
+* take a backup of your live environment
+* run updatedb on your test environment
+* run clear cache on your live environment
+
 ## Examples
 ### Default Running
 ```
