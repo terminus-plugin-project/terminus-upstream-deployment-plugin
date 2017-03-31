@@ -7,10 +7,7 @@ use Pantheon\Terminus\Site\SiteAwareInterface;
 use Pantheon\Terminus\Site\SiteAwareTrait;
 use Pantheon\Terminus\Exceptions\TerminusException;
 use Pantheon\Terminus\Exceptions\TerminusProcessException;
-use Pantheon\Terminus\Commands\Backup;
-use Pantheon\Terminus\Commands\Upstream;
-use Pantheon\Terminus\Commands\Env;
-use Pantheon\Terminus\Commands\Remote\DrushCommand;
+use Symfony\Component\Console\Helper\ProgressBar;
 
 /**
  * Class SitePushUpdateCommand
@@ -51,48 +48,43 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
     $start = time();
     $site = $this->sites->get($site_id);
     $data = $site->serialize();
-    $envs = $site->getEnvironments()->serialize();
     $git_location = '/tmp/'.$data['name'];
 
     $id = $data['id'];
 
-    $drush = new DrushCommand($this->sites);
-    $drush->setLogger($this->logger);
-    $drush->setSites($this->sites);
-
-    $backup = new Backup\CreateCommand($this->sites);
-    $backup->setLogger($this->logger);
-    $backup->setSites($this->sites);
-
-    $deploy = new Env\DeployCommand($this->sites);
-    $deploy->setLogger($this->logger);
-    $deploy->setSites($this->sites);
-
-    $upstream = new Upstream\Updates\ApplyCommand($this->sites);
-    $upstream->setLogger($this->logger);
-    $upstream->setSites($this->sites);
-
     $list_envs = ['dev', 'test', 'live'];
+    $output = $this->output;
 
     foreach($list_envs AS $current_env) {
-      if ($envs[$current_env]['initialized']) {
+      if ($site->getEnvironments()->get($current_env)->isInitialized()) {
         if (!$options['skip_backups']) {
           $this->log()->notice(
             '{site}: {env} creating backup',
             ['site' => $data['label'] ,'env' => $current_env]
           );
-          $backup->create($site_id . '.' . $current_env);
+          $workflow = $site->getEnvironments()->get($current_env)->getBackups()->create();
+
+          $progress = new ProgressBar($output);
+          $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+          $progress->start();
+          while (!$workflow->checkProgress()) {
+            $progress->advance();
+          }
+          $progress->finish();
+
+          $this->log()->notice(
+            '{site}: {env} backup created',
+            ['site' => $data['label'] ,'env' => $current_env]
+          );
         }
 
         if($current_env == 'dev') {
-          //Following should only run for the dev environment
           if ($options['use_git']) {
             $this->passthru("git clone ssh://codeserver.dev.{$id}@codeserver.dev.{$id}.drush.in:2222/~/repository.git {$git_location}");
             $repo = $options['repo'];
             if(is_null($repo)){
-              $upstream_info = explode(':', $data['upstream']);
-              $upstream_data = $this->session()->getUser()->getUpstreams()->get($upstream_info[0])->serialize();
-              $repo = $upstream_data['upstream'];
+              $upstream_data = $site->getUpstream();
+              $repo = $upstream_data->get('url');
             }
             $branch = $options['branch'];
 
@@ -100,7 +92,29 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             $this->passthru("git --git-dir='{$git_location}/.git' push origin master");
             $this->passthru('rm -rf ' . $git_location);
           }else{
-            $upstream->applyUpstreamUpdates($site_id.'.dev', ['accept-upstream' => true]);
+            $env = $site->getEnvironments()->get('dev');
+            $updates = $env->getUpstreamStatus()->getUpdates();
+            $count = count($updates);
+            if ($count) {
+              $this->log()->notice(
+                'Applying {count} upstream update(s) to the {env} environment of {site_id}...',
+                ['count' => $count, 'env' => $env->id, 'site_id' => $site->get('name'),]
+              );
+
+              $workflow = $env->applyUpstreamUpdates(false, true);
+
+              $progress = new ProgressBar($output);
+              $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+              $progress->start();
+              while (!$workflow->checkProgress()) {
+                $progress->advance();
+              }
+              $progress->finish();
+
+              $this->log()->notice($workflow->getMessage());
+            } else {
+              $this->log()->warning('There are no available updates for this site.');
+            }
           }
         }else {
           //Following command does not run for dev environment
@@ -108,8 +122,11 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             '{site}: {env} deploying updates',
             ['site' => $data['label'], 'env' => $current_env]
           );
-          $deploy->deploy($site_id . '.' . $current_env, [
-            'note' => $options['message'],
+
+          $site->getEnvironments()->get($current_env)->deploy([
+            'updatedb' => 0,
+            'clear_cache' => 0,
+            'annotation' => $options['message']
           ]);
         }
 
@@ -124,7 +141,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                 $command['message'],
                 ['site' => $data['label'], 'env' => $current_env]
               );
-              $drush->drushCommand($site_id . '.' . $current_env, $command['commands']);
+              $site->getEnvironments()->get($current_env)->sendCommandViaSsh('drush ' . implode(' ', $command['commands']));
             }catch(TerminusProcessException $e){
               $this->log()->error(
                 $command['message'],
