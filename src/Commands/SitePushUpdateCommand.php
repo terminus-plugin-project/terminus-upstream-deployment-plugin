@@ -117,7 +117,6 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             }
           }
         }else {
-          //Following command does not run for dev environment
           $this->log()->notice(
             '{site}: {env} deploying updates',
             ['site' => $data['label'], 'env' => $current_env]
