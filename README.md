@@ -1,5 +1,6 @@
 # Terminus Upstream Deployment Plugin
 
+[![CircleCI](https://circleci.com/gh/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/1.x.svg?style=svg)](https://circleci.com/gh/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/1.x)
 [![Terminus v1.x Compatible](https://img.shields.io/badge/terminus-v1.x-green.svg)](https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/tree/1.x)
 
 Terminus plugin to automate the process of updating a site through the upstream. This performs a backup before applying upstream updates.

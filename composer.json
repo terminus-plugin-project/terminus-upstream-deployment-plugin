@@ -34,6 +34,9 @@
   "require": {
     "php": ">=5.4"
   },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^2.7"
+  },
   "support": {
     "issues": "https://github.com/terminus-plugin-project/terminus-upstream-deployment-plugin/issues"
   },
