@@ -10,8 +10,8 @@
   run terminus site:update $TERMINUS_SITE --skip_backups
   [[ "$output" == *"${TERMINUS_SITE_LABEL} Starting"* ]]
   [[ "$output" != *"${TERMINUS_SITE_LABEL}: dev creating backup"* ]]
-  [[ "$output" == *"${TERMINUS_SITE_LABEL}: dev updatedb"* ]]
+  [[ "$output" == *"${TERMINUS_SITE_LABEL}: dev drush updatedb"* ]]
   [[ "$output" == *"${TERMINUS_SITE_LABEL}: dev drush clear cache"* ]]
-  [[ "$ouptut" == *"Completed Upstream Update for ${TERMINUS_SITE_LABEL}"* ]]
+  [[ "$output" == *"Completed Upstream Update for ${TERMINUS_SITE_LABEL}"* ]]
   [ "$status" -eq 0 ]
 }
