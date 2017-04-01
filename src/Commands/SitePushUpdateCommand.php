@@ -7,10 +7,7 @@ use Pantheon\Terminus\Site\SiteAwareInterface;
 use Pantheon\Terminus\Site\SiteAwareTrait;
 use Pantheon\Terminus\Exceptions\TerminusException;
 use Pantheon\Terminus\Exceptions\TerminusProcessException;
-use Pantheon\Terminus\Commands\Backup;
-use Pantheon\Terminus\Commands\Upstream;
-use Pantheon\Terminus\Commands\Env;
-use Pantheon\Terminus\Commands\Remote\DrushCommand;
+use Symfony\Component\Console\Helper\ProgressBar;
 
 /**
  * Class SitePushUpdateCommand
@@ -18,13 +15,13 @@ use Pantheon\Terminus\Commands\Remote\DrushCommand;
  */
 class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterface
 {
-  use SiteAwareTrait;
+    use SiteAwareTrait;
 
   /**
    * Pushed updates from upstream to highest environment
    *
    * @authorize
-   * 
+   *
    * @command site:update
    * @aliases update
    *
@@ -41,132 +38,156 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
    * @usage terminus site:update <site_id> --message="<message>" --use_git --repo="<repo>"
    * @usage terminus site:update <site_id> --message="<message>" --use_git --repo="<repo>" --branch="<branch>"
    */
-  public function pushUpdate($site_id, $options = [
+    public function pushUpdate($site_id, $options = [
     'message' => '',
-    'skip_backups' => FALSE,
-    'use_git' => FALSE,
-    'repo' => NULL,
+    'skip_backups' => false,
+    'use_git' => false,
+    'repo' => null,
     'branch' => 'master'
-  ]){
-    $start = time();
-    $site = $this->sites->get($site_id);
-    $data = $site->serialize();
-    $envs = $site->getEnvironments()->serialize();
-    $git_location = '/tmp/'.$data['name'];
+    ])
+    {
+        $start = time();
+        $site = $this->sites->get($site_id);
+        $data = $site->serialize();
+        $git_location = '/tmp/'.$data['name'];
 
-    $id = $data['id'];
+        $id = $data['id'];
 
-    $drush = new DrushCommand($this->sites);
-    $drush->setLogger($this->logger);
-    $drush->setSites($this->sites);
+        $list_envs = ['dev', 'test', 'live'];
+        $output = $this->output;
 
-    $backup = new Backup\CreateCommand($this->sites);
-    $backup->setLogger($this->logger);
-    $backup->setSites($this->sites);
+        $this->log()->notice('{site} Starting', ['site' => $data['label']]);
 
-    $deploy = new Env\DeployCommand($this->sites);
-    $deploy->setLogger($this->logger);
-    $deploy->setSites($this->sites);
+        foreach ($list_envs as $current_env) {
+            if ($site->getEnvironments()->get($current_env)->isInitialized()) {
+                if (!$options['skip_backups']) {
+                    $this->log()->notice(
+                        '{site}: {env} creating backup',
+                        ['site' => $data['label'] ,'env' => $current_env]
+                    );
+                    $workflow = $site->getEnvironments()->get($current_env)->getBackups()->create();
 
-    $upstream = new Upstream\Updates\ApplyCommand($this->sites);
-    $upstream->setLogger($this->logger);
-    $upstream->setSites($this->sites);
+                    $progress = new ProgressBar($output);
+                    $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+                    $progress->start();
+                    while (!$workflow->checkProgress()) {
+                              $progress->advance();
+                    }
+                    $progress->finish();
 
-    $list_envs = ['dev', 'test', 'live'];
+                    $this->log()->notice(
+                        '{site}: {env} backup created',
+                        ['site' => $data['label'] ,'env' => $current_env]
+                    );
+                }
 
-    foreach($list_envs AS $current_env) {
-      if ($envs[$current_env]['initialized']) {
-        if (!$options['skip_backups']) {
-          $this->log()->notice(
-            '{site}: {env} creating backup',
-            ['site' => $data['label'] ,'env' => $current_env]
-          );
-          $backup->create($site_id . '.' . $current_env);
-        }
+                if ($current_env == 'dev') {
+                    if ($options['use_git']) {
+                        $this->passthru("git clone ssh://codeserver.dev.{$id}@codeserver.dev.{$id}.drush.in:2222/~/repository.git {$git_location}");
+                        $repo = $options['repo'];
+                        if (is_null($repo)) {
+                            $upstream_data = $site->getUpstream();
+                            $repo = $upstream_data->get('url');
+                        }
+                        $branch = $options['branch'];
 
-        if($current_env == 'dev') {
-          //Following should only run for the dev environment
-          if ($options['use_git']) {
-            $this->passthru("git clone ssh://codeserver.dev.{$id}@codeserver.dev.{$id}.drush.in:2222/~/repository.git {$git_location}");
-            $repo = $options['repo'];
-            if(is_null($repo)){
-              $upstream_info = explode(':', $data['upstream']);
-              $upstream_data = $this->session()->getUser()->getUpstreams()->get($upstream_info[0])->serialize();
-              $repo = $upstream_data['upstream'];
+                        $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$repo} {$branch}");
+                        $this->passthru("git --git-dir='{$git_location}/.git' push origin master");
+                        $this->passthru('rm -rf ' . $git_location);
+                    } else {
+                        $env = $site->getEnvironments()->get('dev');
+                        $updates = $env->getUpstreamStatus()->getUpdates();
+                        $count = count($updates);
+                        if ($count) {
+                            $this->log()->notice(
+                                'Applying {count} upstream update(s) to the {env} environment of {site_id}...',
+                                ['count' => $count, 'env' => $env->id, 'site_id' => $site->get('name'),]
+                            );
+
+                            $workflow = $env->applyUpstreamUpdates(false, true);
+
+                            $progress = new ProgressBar($output);
+                            $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+                            $progress->start();
+                            while (!$workflow->checkProgress()) {
+                                          $progress->advance();
+                            }
+                            $progress->finish();
+
+                            $this->log()->notice($workflow->getMessage());
+                        } else {
+                            $this->log()->warning('There are no available updates for this site.');
+                        }
+                    }
+                } else {
+                    $this->log()->notice(
+                        '{site}: {env} deploying updates',
+                        ['site' => $data['label'], 'env' => $current_env]
+                    );
+
+                    $site->getEnvironments()->get($current_env)->deploy([
+                    'updatedb' => 0,
+                    'clear_cache' => 0,
+                    'annotation' => $options['message']
+                    ]);
+                }
+
+                if ($data['framework'] == 'drupal') {
+                    $commands = [
+                    ['message' => '{site}: {env} drush updatedb', 'commands' => ['updatedb' ,'-y']],
+                    ['message' => '{site}: {env} drush clear cache', 'commands' => ['cc' ,'all']]
+                    ];
+                    foreach ($commands as $command) {
+                        try {
+                            $this->log()->notice(
+                                $command['message'],
+                                ['site' => $data['label'], 'env' => $current_env]
+                            );
+                            $site->getEnvironments()->get($current_env)->sendCommandViaSsh('drush ' . implode(' ', $command['commands']));
+                        } catch (TerminusProcessException $e) {
+                            $this->log()->error(
+                                $command['message'],
+                                ['site' => $data['label'], 'env' => $current_env]
+                            );
+                        }
+                    }
+                }
             }
-            $branch = $options['branch'];
-
-            $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$repo} {$branch}" );
-            $this->passthru("git --git-dir='{$git_location}/.git' push origin master");
-            $this->passthru('rm -rf ' . $git_location);
-          }else{
-            $upstream->applyUpstreamUpdates($site_id.'.dev', ['accept-upstream' => true]);
-          }
-        }else {
-          //Following command does not run for dev environment
-          $this->log()->notice(
-            '{site}: {env} deploying updates',
-            ['site' => $data['label'], 'env' => $current_env]
-          );
-          $deploy->deploy($site_id . '.' . $current_env, [
-            'note' => $options['message'],
-          ]);
         }
 
-        if ($data['framework'] == 'drupal') {
-          $commands = [
-            ['message' => '{site}: {env} drush updatedb', 'commands' => ['updatedb' ,'-y']],
-            ['message' => '{site}: {env} drush clear cache', 'commands' => ['cc' ,'all']]
-          ];
-          foreach($commands AS $command) {
-            try {
-              $this->log()->notice(
-                $command['message'],
-                ['site' => $data['label'], 'env' => $current_env]
-              );
-              $drush->drushCommand($site_id . '.' . $current_env, $command['commands']);
-            }catch(TerminusProcessException $e){
-              $this->log()->error(
-                $command['message'],
-                ['site' => $data['label'], 'env' => $current_env]
-              );
-            }
-          }
-        }
-      }
+        $this->log()->notice(
+            'Completed Upstream Update for {site}',
+            ['site' => $data['label']]
+        );
+        $end = time();
+
+        $diff = $end - $start;
+        $this->log()->notice(
+            "Started: {start}\r\nEnded: {end}\r\nTotal Time: {hours} hours {minutes} minutes {seconds} seconds",
+            [
+            'start' => date('Y-m-d H:i:s', $start),
+            'end' => date('Y-m-d H:i:s', $end),
+            'hours' => intval($diff / 3600),
+            'minutes' => intval(($diff % 3600) / 60),
+            'seconds' => intval($diff % 60)
+            ]
+        );
     }
-
-    $this->log()->notice(
-      'Completed Upstream Update for {site}', ['site' => $data['label']]
-    );
-    $end = time();
-
-    $diff = $end - $start;
-    $this->log()->notice(
-      "Started: {start}\r\nEnded: {end}\r\nTotal Time: {hours} hours {minutes} minutes {seconds} seconds",
-      [
-        'start' => date('Y-m-d H:i:s', $start),
-        'end' => date('Y-m-d H:i:s', $end),
-        'hours' => intval($diff / 3600),
-        'minutes' => intval(($diff % 3600) / 60),
-        'seconds' => intval($diff % 60)
-      ]);
-  }
 
   /**
    * Call passthru; throw an exception on failure.
    *
    * @param string $command
    */
-  protected function passthru($command, $loggedCommand = '')
-  {
-    $result = 0;
-    $loggedCommand = empty($loggedCommand) ? $command : $loggedCommand;
-    // TODO: How noisy do we want to be?
-    $this->log()->notice("Running {cmd}", ['cmd' => $loggedCommand]);
-    passthru($command, $result);
-    if ($result != 0) {
-      throw new TerminusException('Command `{command}` failed with exit code {status}', ['command' => $loggedCommand, 'status' => $result]);
+    protected function passthru($command, $loggedCommand = '')
+    {
+        $result = 0;
+        $loggedCommand = empty($loggedCommand) ? $command : $loggedCommand;
+        // TODO: How noisy do we want to be?
+        $this->log()->notice("Running {cmd}", ['cmd' => $loggedCommand]);
+        passthru($command, $result);
+        if ($result != 0) {
+            throw new TerminusException('Command `{command}` failed with exit code {status}', ['command' => $loggedCommand, 'status' => $result]);
+        }
     }
-  }
 }

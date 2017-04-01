@@ -1,2 +1,6 @@
 /vendor/
-.idea
+/bats/
+/bin/
+/libexec/
+/share/
+/.idea/
