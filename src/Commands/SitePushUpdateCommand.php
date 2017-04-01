@@ -28,20 +28,20 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
    * @param string $site_id Site in the format `site-name`
    * @option string $message Deploy message to include in test and live environments (optional)
    * @option boolean $skip_backups Skip taking backups before deploying updates (optional)
-   * @option boolean $use_git Use the upstream git repo to pull changes from (optional)
+   * @option boolean $git Use the upstream git repo to pull changes from (optional)
    * @option string $repo The repository to use for updates (optional)
    * @option string $branch The branch of the repository to apply updates from (optional)
    *
    * @usage terminus site:update <site_id> --message="<message>"
    * @usage terminus site:update <site_id> --skip_backups
-   * @usage terminus site:update <site_id> --message="<message>" --use_git
-   * @usage terminus site:update <site_id> --message="<message>" --use_git --repo="<repo>"
-   * @usage terminus site:update <site_id> --message="<message>" --use_git --repo="<repo>" --branch="<branch>"
+   * @usage terminus site:update <site_id> --message="<message>" --git
+   * @usage terminus site:update <site_id> --message="<message>" --git --repo="<repo>"
+   * @usage terminus site:update <site_id> --message="<message>" --git --repo="<repo>" --branch="<branch>"
    */
     public function pushUpdate($site_id, $options = [
     'message' => '',
     'skip_backups' => false,
-    'use_git' => false,
+    'git' => false,
     'repo' => null,
     'branch' => 'master'
     ])
@@ -50,8 +50,6 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
         $site = $this->sites->get($site_id);
         $data = $site->serialize();
         $git_location = '/tmp/'.$data['name'];
-
-        $id = $data['id'];
 
         $list_envs = ['dev', 'test', 'live'];
         $output = $this->output;
@@ -82,8 +80,11 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                 }
 
                 if ($current_env == 'dev') {
-                    if ($options['use_git']) {
-                        $this->passthru("git clone ssh://codeserver.dev.{$id}@codeserver.dev.{$id}.drush.in:2222/~/repository.git {$git_location}");
+                    if ($options['git']) {
+                        $this->passthru("rm -rf {$git_location}");
+                        $site_git = $site->getEnvironments()->get('dev')->gitConnectionInfo()['url'];
+                        $this->passthru("git clone {$site_git} {$git_location}");
+
                         $repo = $options['repo'];
                         if (is_null($repo)) {
                             $upstream_data = $site->getUpstream();
@@ -91,9 +92,12 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         }
                         $branch = $options['branch'];
 
-                        $this->passthru("git --git-dir='{$git_location}/.git' pull --no-edit --commit -X theirs {$repo} {$branch}");
-                        $this->passthru("git --git-dir='{$git_location}/.git' push origin master");
-                        $this->passthru('rm -rf ' . $git_location);
+                        $message = (empty($options['message']) ? '' : "-m '{$options['message']}'");
+                        $this->passthru("git -C '{$git_location}/.git' --work-tree='{$git_location}' remote add upstream {$repo}");
+                        $this->passthru("git -C '{$git_location}/.git' --work-tree='{$git_location}' fetch upstream");
+                        $this->passthru("git -C '{$git_location}/.git' --work-tree='{$git_location}' merge --no-ff --no-edit --commit {$message} -X theirs upstream/{$branch}");
+                        $this->passthru("git -C '{$git_location}/.git' --work-tree='{$git_location}' push origin master");
+                        $this->passthru("rm -rf {$git_location}");
                     } else {
                         $env = $site->getEnvironments()->get('dev');
                         $updates = $env->getUpstreamStatus()->getUpdates();
@@ -110,7 +114,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                             $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
                             $progress->start();
                             while (!$workflow->checkProgress()) {
-                                          $progress->advance();
+                              $progress->advance();
                             }
                             $progress->finish();
 
