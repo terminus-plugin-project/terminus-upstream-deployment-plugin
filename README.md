@@ -39,7 +39,7 @@ $ terminus site:update companysite-33.dev --git
 
 ### Perform updates using a separate repository
 ```
-$ terminus site:update companysite-33.dev --ugit --repo="git://github.com/pantheon-systems/drops-7.git"
+$ terminus site:update companysite-33.dev --git --repo="git://github.com/pantheon-systems/drops-7.git"
 ```
 
 ### Perform updates using a separate repository and a separate branch
