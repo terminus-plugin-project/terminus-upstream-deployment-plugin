@@ -20,5 +20,8 @@ dependencies:
   post:
     - terminus auth:login --machine-token=$TERMINUS_TOKEN
 test:
+  pre:
+    - echo $TERMINUS_SITE
+    - echo $TERMINUS_SITE_LABEL
   override:
     - composer test
