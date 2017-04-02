@@ -54,14 +54,14 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
         $list_envs = ['dev', 'test', 'live'];
         $output = $this->output;
 
-        $this->log()->notice('{site} Starting', ['site' => $data['label']]);
+        $this->log()->notice('{site} Starting', ['site' => $data['name']]);
 
         foreach ($list_envs as $current_env) {
             if ($site->getEnvironments()->get($current_env)->isInitialized()) {
                 if (!$options['skip_backups']) {
                     $this->log()->notice(
                         '{site}: {env} creating backup',
-                        ['site' => $data['label'] ,'env' => $current_env]
+                        ['site' => $data['name'] ,'env' => $current_env]
                     );
                     $workflow = $site->getEnvironments()->get($current_env)->getBackups()->create();
 
@@ -75,7 +75,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
 
                     $this->log()->notice(
                         '{site}: {env} backup created',
-                        ['site' => $data['label'] ,'env' => $current_env]
+                        ['site' => $data['name'] ,'env' => $current_env]
                     );
                 }
 
@@ -114,7 +114,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                             $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
                             $progress->start();
                             while (!$workflow->checkProgress()) {
-                              $progress->advance();
+                                $progress->advance();
                             }
                             $progress->finish();
 
@@ -126,7 +126,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                 } else {
                     $this->log()->notice(
                         '{site}: {env} deploying updates',
-                        ['site' => $data['label'], 'env' => $current_env]
+                        ['site' => $data['name'], 'env' => $current_env]
                     );
 
                     $site->getEnvironments()->get($current_env)->deploy([
@@ -145,13 +145,13 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         try {
                             $this->log()->notice(
                                 $command['message'],
-                                ['site' => $data['label'], 'env' => $current_env]
+                                ['site' => $data['name'], 'env' => $current_env]
                             );
                             $site->getEnvironments()->get($current_env)->sendCommandViaSsh('drush ' . implode(' ', $command['commands']));
                         } catch (TerminusProcessException $e) {
                             $this->log()->error(
                                 $command['message'],
-                                ['site' => $data['label'], 'env' => $current_env]
+                                ['site' => $data['name'], 'env' => $current_env]
                             );
                         }
                     }
@@ -161,7 +161,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
 
         $this->log()->notice(
             'Completed Upstream Update for {site}',
-            ['site' => $data['label']]
+            ['site' => $data['name']]
         );
         $end = time();
 

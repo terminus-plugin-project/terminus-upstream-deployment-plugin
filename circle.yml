@@ -22,6 +22,6 @@ dependencies:
 test:
   pre:
     - echo $TERMINUS_SITE
-    - echo $TERMINUS_SITE_LABEL
+    - composer config --global process-timeout 2000
   override:
     - composer test
