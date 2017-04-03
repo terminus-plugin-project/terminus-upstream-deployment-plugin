@@ -80,6 +80,34 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                 }
 
                 if ($current_env == 'dev') {
+                    $env = $site->getEnvironments()->get('dev');
+                    if ($env->get('connection_mode') !== 'git') {
+                      $change_count = count((array)$env->diffstat());
+                      if ($change_count > 0) {
+                        $this->log()->notice('{site}: Code uncommitted. Committing now.', ['site' => $site->get('name')]);
+                        $workflow = $env->commitChanges($options['message']);
+                        $progress = new ProgressBar($output);
+                        $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+                        $progress->start();
+                        while (!$workflow->checkProgress()) {
+                          $progress->advance();
+                        }
+                        $progress->finish();
+                      }
+
+
+                      $this->log()->notice('{site}: Changing connection mode to git', ['site' => $site->get('name')]);
+                      $workflow = $env->changeConnectionMode('git');
+                      if (is_string($workflow)) {
+                        $this->log()->notice($workflow);
+                      } else {
+                        while (!$workflow->checkProgress()) {
+                          // TODO: (ajbarry) Add workflow progress output
+                        }
+                        $this->log()->notice($workflow->getMessage());
+                      }
+                    }
+
                     if ($options['git']) {
                         $this->passthru("rm -rf {$git_location}");
                         $site_git = $site->getEnvironments()->get('dev')->gitConnectionInfo()['url'];
