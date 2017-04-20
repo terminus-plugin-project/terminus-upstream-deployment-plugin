@@ -128,9 +128,9 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         $this->passthru("rm -rf {$git_location}");
                     } else {
                         $env = $site->getEnvironments()->get('dev');
-                        $updates = $env->getUpstreamStatus()->getUpdates();
+                        $updates = (array)$env->getUpstreamStatus()->getUpdates()->update_log;
                         $count = count($updates);
-                        if ($count) {
+                        if ($count > 0) {
                             $this->log()->notice(
                                 'Applying {count} upstream update(s) to the {env} environment of {site_id}...',
                                 ['count' => $count, 'env' => $env->id, 'site_id' => $site->get('name'),]
@@ -152,16 +152,23 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         }
                     }
                 } else {
-                    $this->log()->notice(
+                    $env = $site->getEnvironments()->get($current_env);
+                    if ($env->hasDeployableCode()) {
+                      $this->log()->notice(
                         '{site}: {env} deploying updates',
                         ['site' => $data['name'], 'env' => $current_env]
-                    );
-
-                    $site->getEnvironments()->get($current_env)->deploy([
-                    'updatedb' => 0,
-                    'clear_cache' => 0,
-                    'annotation' => $options['message']
-                    ]);
+                      );
+                      $env->deploy([
+                        'updatedb' => 0,
+                        'clear_cache' => 0,
+                        'annotation' => $options['message']
+                      ]);
+                    }else{
+                      $this->log()->notice(
+                        '{site}: {env} has no deployable code',
+                        ['site' => $data['name'], 'env' => $current_env]
+                      );
+                    }
                 }
 
                 if ($data['framework'] == 'drupal') {
