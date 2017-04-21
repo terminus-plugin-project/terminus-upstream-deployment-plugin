@@ -28,6 +28,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
    * @param string $site_id Site in the format `site-name`
    * @option string $message Deploy message to include in test and live environments (optional)
    * @option boolean $skip_backups Skip taking backups before deploying updates (optional)
+   * @option boolean $skip_updatedb Skip Updatedb Process (optional - Drupal only)
    * @option boolean $git Use the upstream git repo to pull changes from (optional)
    * @option string $repo The repository to use for updates (optional)
    * @option string $branch The branch of the repository to apply updates from (optional)
@@ -41,6 +42,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
     public function pushUpdate($site_id, $options = [
     'message' => '',
     'skip_backups' => false,
+    'skip_updatedb' => false,
     'git' => false,
     'repo' => null,
     'branch' => 'master'
@@ -159,8 +161,8 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         ['site' => $data['name'], 'env' => $current_env]
                       );
                       $env->deploy([
-                        'updatedb' => 0,
-                        'clear_cache' => 0,
+                        'updatedb' => !$options['skip_updatedb'],
+                        'clear_cache' => 1,
                         'annotation' => $options['message']
                       ]);
                     }else{
@@ -171,7 +173,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                     }
                 }
 
-                if ($data['framework'] == 'drupal') {
+                if ($data['framework'] == 'drupal' && !$options['skip_updatedb']) {
                     $commands = [
                     ['message' => '{site}: {env} drush updatedb', 'commands' => ['updatedb' ,'-y']],
                     ['message' => '{site}: {env} drush clear cache', 'commands' => ['cc' ,'all']]
