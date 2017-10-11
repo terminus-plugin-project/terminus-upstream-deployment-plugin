@@ -7,7 +7,13 @@ use Pantheon\Terminus\Site\SiteAwareInterface;
 use Pantheon\Terminus\Site\SiteAwareTrait;
 use Pantheon\Terminus\Exceptions\TerminusException;
 use Pantheon\Terminus\Exceptions\TerminusProcessException;
+use Pantheon\TerminusUpstreamDev\UpdateTask;
 use Symfony\Component\Console\Helper\ProgressBar;
+
+use Amp\Coroutine;
+use Amp\Loop;
+use Amp\Parallel\Worker\DefaultPool;
+use Amp\Promise;
 
 /**
  * Class SitePushUpdateCommand
@@ -15,7 +21,13 @@ use Symfony\Component\Console\Helper\ProgressBar;
  */
 class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterface
 {
-    use SiteAwareTrait;
+  use SiteAwareTrait;
+
+  /** @var  DefaultPool $pool Pool of coroutines */
+  var $pool;
+
+  /** @var  array $coroutines */
+  var $coroutines = [];
 
   /**
    * Pushed updates from upstream to highest environment
@@ -26,6 +38,8 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
    * @aliases update
    *
    * @param string $site_id Site in the format `site-name`
+   * @param array $options
+   *
    * @option string $message Deploy message to include in test and live environments (optional)
    * @option boolean $skip_backups Skip taking backups before deploying updates (optional)
    * @option boolean $skip_updatedb Skip Updatedb Process (optional - Drupal only)
@@ -193,6 +207,11 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         }
                     }
                 }
+
+                // Reset the environments
+                $site->unsetEnvironments();
+                // Sleeping for 15 seconds between each environment
+                sleep(15);
             }
         }
 
@@ -213,12 +232,17 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             'seconds' => intval($diff % 60)
             ]
         );
+
+        return true;
     }
 
   /**
    * Call passthru; throw an exception on failure.
    *
    * @param string $command
+   * @param string $loggedCommand
+   *
+   * @throws \Pantheon\Terminus\Exceptions\TerminusException
    */
     protected function passthru($command, $loggedCommand = '')
     {
@@ -231,4 +255,147 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
             throw new TerminusException('Command `{command}` failed with exit code {status}', ['command' => $loggedCommand, 'status' => $result]);
         }
     }
+
+  /**
+   * Mass push updates from upstream to highest environment
+   *
+   * @authorize
+   *
+   * @command site:massupdate
+   * @aliases massupdate
+   *
+   * @option string $org Organization Name or ID to pull list of sites from (optional)
+   * @option string $tag Tags of sites to pull list from. Can only be used in conjunction with $org (optional)
+   * @option string $team Team Name or ID to filter list of sites from (optional)
+   * @option string $sites List of sites to run as part of the update process (optional)
+   * @option string $include List of sites to include as part of the running process. (optional)
+   * @option string $exclude List of sites to exclude from running updates on. (optional)
+   * @option string $message Deploy message to include in test and live environments (optional)
+   * @option boolean $skip_backups Skip taking backups before deploying updates (optional)
+   * @option boolean $skip_updatedb Skip Updatedb Process (optional - Drupal only)
+   * @option boolean $git Use the upstream git repo to pull changes from (optional)
+   * @option string $repo The repository to use for updates (optional)
+   * @option string $branch The branch of the repository to apply updates from (optional)
+   * @option boolean $use-queue To queue these items and run them asynchronously (optional)
+   *
+   * @usage terminus site:massupdate --message="<message>"
+   * @usage terminus site:massupdate --skip_backups
+   * @usage terminus site:massupdate --message="<message>" --git
+   * @usage terminus site:massupdate --message="<message>" --git --repo="<repo>"
+   * @usage terminus site:massupdate --message="<message>" --git --repo="<repo>" --branch="<branch>"
+   *
+   * @param array $options
+   *
+   * @throws \Pantheon\Terminus\Exceptions\TerminusException
+   */
+  public function pushMassUpdate($options = [
+    'tag' => null,
+    'org' => null,
+    'team' => false,
+    'owner' => null,
+    'sites' => null,
+    'include' => null,
+    'exclude' => null,
+    'message' => null,
+    'skip_backups' => false,
+    'skip_updatedb' => false,
+    'repo' => null,
+    'git' => false,
+    'branch' => 'master',
+    'use-queue' => false
+  ])
+  {
+    $sites_include = array();
+    // Add in additional sites.
+    if(!is_null($options['include'])) {
+      $tmp_sites_include = explode(',', $options['include']);
+      $sites_include = [];
+      if (count($tmp_sites_include) > 0) {
+        foreach ($tmp_sites_include AS $site) {
+          $item = $this->sites->get($site)->serialize();
+          $sites_include[$item['id']] = $item;
+        }
+      }
+    }
+
+    // Check to see if the user has access to Organization
+    $org = null;
+    if (!is_null($organization = $options['org'])) {
+      $org_object = $this->session()->getUser()->getOrganizationMemberships()->get($organization)->getOrganization();
+      $org = $org_object->id;
+    }
+
+    // Filter sites, if necessary.
+    $this->sites->fetch([
+      'org_id' => $org,
+      'team_only' => $options['team'],
+    ]);
+
+    if (!is_null($options['sites'])){
+      $site_list = explode(',', $options['sites']);
+      $this->sites->filter(function($site) use ($site_list) {
+        if(array_search($site->id, $site_list) === FALSE && array_search($site->getName(), $site_list) === FALSE){
+          return false;
+        }
+        return true;
+      });
+    }
+
+    if (isset($options['owner']) && !is_null($owner = $options['owner'])) {
+      if ($owner == 'me') {
+        $owner = $this->session()->getUser()->id;
+      }
+      $this->sites->filterByOwner($owner);
+    }
+
+    if(!is_null($tag = $options['tag'])) {
+      if(is_null($org)){
+        throw new TerminusException('--tag option is only allowed when used with --org option.');
+      }
+      $this->sites->filterByTag($tag);
+    }
+
+    // Remove sites that marked for excluding.
+    if (!is_null($options['exclude'])) {
+      $exclude = explode(',', $options['exclude']);
+      $this->sites->filter(function ($site) use ($exclude) {
+        if (array_search($site->id, $exclude) !== FALSE || array_search($site->getName(), $exclude) !== FALSE) {
+          return FALSE;
+        }
+        return TRUE;
+      });
+    }
+
+    $sites = $sites = $this->sites->serialize();
+
+    // Merge all filtered sites and all included sites.
+    $sites = array_merge($sites, $sites_include);
+
+
+    $this->pool = new DefaultPool;
+    $this->pool->start();
+
+    $upstreamTest = &$this;
+    array_walk($sites, function($site) use ($options, $upstreamTest) {
+      if(!$options['use-queue']) {
+        $upstreamTest->pushUpdate($site->id, $options);
+      }
+      else{
+        $upstreamTest->coroutines[] = function () use ($upstreamTest, $site, $options) {
+          yield $upstreamTest->pool->enqueue(new UpdateTask($upstreamTest, $site, $options));
+        };
+      }
+    });
+
+    if($options['use-queue']){
+      $coroutines = array_map(function (callable $coroutine): Coroutine {
+        return new Coroutine($coroutine());
+      }, $upstreamTest->coroutines);
+
+      Loop::run(function () use ($upstreamTest, $coroutines) {
+        yield Promise\all($coroutines);
+        return yield $upstreamTest->pool->shutdown();
+      });
+    }
+  }
 }
