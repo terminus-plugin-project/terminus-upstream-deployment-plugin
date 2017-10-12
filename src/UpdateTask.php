@@ -35,7 +35,8 @@ class UpdateTask implements Task {
    * @param \Amp\Parallel\Worker\Environment $environment
    */
   public function run(Environment $environment) {
-    $this->class->pushUpdate($this->site, $this->options);
+    //$this->class->pushUpdate($this->site, $this->options);
+    $this->class->getLogger()->notice('{site}', ['site' => $this->site['name']]);
   }
 
 }

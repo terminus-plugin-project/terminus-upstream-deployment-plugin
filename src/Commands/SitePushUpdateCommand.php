@@ -23,12 +23,6 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
 {
   use SiteAwareTrait;
 
-  /** @var  DefaultPool $pool Pool of coroutines */
-  var $pool;
-
-  /** @var  array $coroutines */
-  var $coroutines = [];
-
   /**
    * Pushed updates from upstream to highest environment
    *
@@ -277,6 +271,7 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
    * @option string $repo The repository to use for updates (optional)
    * @option string $branch The branch of the repository to apply updates from (optional)
    * @option boolean $use-queue To queue these items and run them asynchronously (optional)
+   * @option int $max-workers The max number of workers to run in the queue (optional)
    *
    * @usage terminus site:massupdate --message="<message>"
    * @usage terminus site:massupdate --skip_backups
@@ -302,7 +297,8 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
     'repo' => null,
     'git' => false,
     'branch' => 'master',
-    'use-queue' => false
+    'use-queue' => false,
+    'max-workers' => 4
   ])
   {
     $sites_include = array();
@@ -360,9 +356,9 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
       $exclude = explode(',', $options['exclude']);
       $this->sites->filter(function ($site) use ($exclude) {
         if (array_search($site->id, $exclude) !== FALSE || array_search($site->getName(), $exclude) !== FALSE) {
-          return FALSE;
+          return false;
         }
-        return TRUE;
+        return true;
       });
     }
 
@@ -371,31 +367,42 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
     // Merge all filtered sites and all included sites.
     $sites = array_merge($sites, $sites_include);
 
-
-    $this->pool = new DefaultPool;
-    $this->pool->start();
-
-    $upstreamTest = &$this;
-    array_walk($sites, function($site) use ($options, $upstreamTest) {
-      if(!$options['use-queue']) {
-        $upstreamTest->pushUpdate($site->id, $options);
-      }
-      else{
-        $upstreamTest->coroutines[] = function () use ($upstreamTest, $site, $options) {
-          yield $upstreamTest->pool->enqueue(new UpdateTask($upstreamTest, $site, $options));
-        };
-      }
-    });
-
     if($options['use-queue']){
-      $coroutines = array_map(function (callable $coroutine): Coroutine {
-        return new Coroutine($coroutine());
-      }, $upstreamTest->coroutines);
+      $upstreamTest = &$this;
 
-      Loop::run(function () use ($upstreamTest, $coroutines) {
+      Loop::run(function () use ($upstreamTest, $sites, $options) {
+        $pool = new DefaultPool(1, $options['max-workers']);
+        $pool->start();
+        $coroutines = [];
+
+        foreach ($sites as $site) {
+          $coroutines[] = function () use ($upstreamTest, $site, $options, $pool) {
+            yield $pool->enqueue(new UpdateTask($upstreamTest, $site, $options));
+          };
+        }
+
+        $coroutines = array_map(function (callable $coroutine): Coroutine {
+          return new Coroutine($coroutine());
+        }, $coroutines);
+
+
+        echo "Promise \r\n";
         yield Promise\all($coroutines);
-        return yield $upstreamTest->pool->shutdown();
+        return yield $pool->shutdown();
       });
     }
+    else {
+      foreach($sites AS $site) {
+        //$upstreamTest->pushUpdate($site->id, $options);
+        $this->log()->notice('{site}', ['site' => $site['name']]);
+      }
+    }
+  }
+
+  /**
+   * @return \Psr\Log\LoggerInterface
+   */
+  public function getLogger() {
+    return $this->log();
   }
 }
