@@ -160,11 +160,18 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                         '{site}: {env} deploying updates',
                         ['site' => $data['name'], 'env' => $current_env]
                       );
-                      $env->deploy([
+                      $workflow = $env->deploy([
                         'updatedb' => !$options['skip_updatedb'],
                         'clear_cache' => 1,
                         'annotation' => $options['message']
                       ]);
+                      $progress = new ProgressBar($output);
+                      $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+                      $progress->start();
+                      while (!$workflow->checkProgress()) {
+                        $progress->advance();
+                      }
+                      $progress->finish();
                     }else{
                       $this->log()->notice(
                         '{site}: {env} has no deployable code',
