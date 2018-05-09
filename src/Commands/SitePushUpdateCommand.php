@@ -155,22 +155,22 @@ class SitePushUpdateCommand extends TerminusCommand implements SiteAwareInterfac
                     }
                 } else {
                     $env = $site->getEnvironments()->get($current_env);
-                    if ($env->hasDeployableCode()) {
-                      $this->log()->notice(
-                        '{site}: {env} deploying updates',
-                        ['site' => $data['name'], 'env' => $current_env]
-                      );
-                      $env->deploy([
-                        'updatedb' => !$options['skip_updatedb'],
-                        'clear_cache' => 1,
-                        'annotation' => $options['message']
-                      ]);
-                    }else{
-                      $this->log()->notice(
-                        '{site}: {env} has no deployable code',
-                        ['site' => $data['name'], 'env' => $current_env]
-                      );
+                    $this->log()->notice(
+                      '{site}: {env} deploying updates',
+                      ['site' => $data['name'], 'env' => $current_env]
+                    );
+                    $workflow = $env->deploy([
+                      'updatedb' => !$options['skip_updatedb'],
+                      'clear_cache' => 1,
+                      'annotation' => $options['message']
+                    ]);
+                    $progress = new ProgressBar($output);
+                    $progress->setFormat('[%bar%] %elapsed:6s% %memory:6s%');
+                    $progress->start();
+                    while (!$workflow->checkProgress()) {
+                      $progress->advance();
                     }
+                    $progress->finish();
                 }
 
                 if ($data['framework'] == 'drupal' && !$options['skip_updatedb']) {
